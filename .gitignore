@@ -1,0 +1,20 @@
+# Ignore object files
+*.o
+
+# Ignore compiled binaries and executables
+*.out
+*.exe
+*.elf
+
+# Ignore shared and static libraries
+*.a
+*.so
+*.dylib
+
+# Ignore core dumps
+core
+
+# Ignore debug files
+*.d
+*.map
+*.sym
