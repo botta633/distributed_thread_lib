@@ -18,3 +18,5 @@ core
 *.d
 *.map
 *.sym
+
+.gdb_history
