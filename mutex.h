@@ -10,9 +10,9 @@
 typedef struct{
     _Atomic int lock;
     int owner;
-} mutex_t;
+} thread_mutex_t;
 
-void thread_mutex_lock(mutex_t *);
-void thread_mutex_unlock(mutex_t *);
-void mutex_init(mutex_t *);
+void thread_mutex_lock(thread_mutex_t *);
+void thread_mutex_unlock(thread_mutex_t *);
+void mutex_init(thread_mutex_t *);
 #endif

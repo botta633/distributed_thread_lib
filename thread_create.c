@@ -70,6 +70,7 @@ int thread_create(thread_t *new_thread, FuncPointer start_routine, void *arg) {
 
   // TODO->introduce TLS
   // current behavior passing a pointer to thread_struct on stack
+
   stacktop = stackaddr + STACK_SIZE;
   long func_location = (long)stacktop - 16;
   long args_location = func_location + 8;
@@ -107,9 +108,12 @@ int thread_create(thread_t *new_thread, FuncPointer start_routine, void *arg) {
 
 int y = 3;
 int x = 0;
+thread_mutex_t mutex;
 void *test_func2(void *args) {
-  sleep(x++%3);
+  thread_mutex_lock(&mutex);
   printf("y is %d\n", *(int *)args);
+  sleep(3);
+  thread_mutex_unlock(&mutex);
   return 0;
 }
 

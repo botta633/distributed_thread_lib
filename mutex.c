@@ -19,11 +19,11 @@ static int futex(uint32_t *uaddr, int futex_op, uint32_t val,
 }
 
 
-void mutex_init(mutex_t *m) {
+void mutex_init(thread_mutex_t *m) {
     atomic_store(&m->lock, 0);
 }
 
-void thread_mutex_lock(mutex_t *m) {
+void thread_mutex_lock(thread_mutex_t *m) {
     int expected = false;
     long s;
     pid_t owner = syscall(SYS_gettid);
@@ -43,7 +43,7 @@ void thread_mutex_lock(mutex_t *m) {
     m->owner = owner;
 }
 
-void thread_mutex_unlock(mutex_t *m)
+void thread_mutex_unlock(thread_mutex_t *m)
 {
     if(atomic_load(&m->lock) == 0)
         return;
