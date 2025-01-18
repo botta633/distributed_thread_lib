@@ -15,6 +15,8 @@
 #include <sys/syscall.h> /* Definition of SYS_* constants */
 #include <sys/wait.h>
 #include <unistd.h>
+#include <ucontext.h>
+#include <linux/taskstats.h>
 
 #define PAGE_SIZE 4096
 #define STACK_SIZE (2 * 1024 * 1024)

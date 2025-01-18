@@ -2,6 +2,8 @@
 #define THREAD_INTERNAL
 #include "list.h"
 
+#define MAX_THREAD_NUM 100
+
 typedef void *(*FuncPointer)(void *);
 typedef void (*voidFuncPointer)(void *);
 

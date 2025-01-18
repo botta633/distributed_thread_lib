@@ -9,6 +9,7 @@ typedef struct {
 void thread_cond_init(thread_cond_t* );
 void thread_cond_wait(thread_cond_t*, thread_mutex_t *);
 void thread_cond_signal(thread_cond_t*);
+void thread_cond_signal_broadcast(thread_cond_t*);
 
 
 
