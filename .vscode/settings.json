@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "mutex.h": "c",
+        "kernel.h": "c",
+        "module.h": "c"
+    }
+}

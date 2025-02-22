@@ -10,6 +10,7 @@
 #include <sys/wait.h>
 #include <stdlib.h>
 #include <stdatomic.h>
+#include <ucontext.h>
 
 static int futex(uint32_t *uaddr, int futex_op, uint32_t val,
         const struct timespec *timeout, uint32_t *uaddr2, uint32_t val3)
