@@ -62,7 +62,7 @@ static void thread_start(void *arg)
   thread_args *args = thread->args;
   args->start_routine(args->args); // Execute the start routine
 
-  capture_context(thread->tid);
+  capture_memory_pages(thread->tid);
   free(args);
   thread_exit(thread);
 }

@@ -12,7 +12,7 @@
  * @param tid: the thread id
  */
 
-void capture_context(int tid)
+void capture_memory_pages(int tid)
 {
 
     char dir_name[256];
