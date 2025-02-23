@@ -4,6 +4,7 @@
 #include "capture_context.h"
 #include <string.h>
 #include <stdio.h>
+#include <sys/stat.h>  // for mkdir
 
 /**
  * Captures the memory maps for a thread with tid 
@@ -16,9 +17,25 @@
 
 void capture_context(int tid)
 {
+
+    char dir_name[256];
+    sprintf(dir_name, "./thread_%d_dump", tid);
+    char rm_command[256];
+    sprintf(rm_command, "rm -rf %s", dir_name);
+    system(rm_command);
+    
+    if (mkdir(dir_name, 0755) == -1) {
+        perror("mkdir failed");
+        exit(1);
+    }
+    
+    if(access(dir_name, W_OK) == -1) {
+        perror("directory not writable");
+        exit(1);
+    }
+
     char proc_maps_path[256];
     sprintf(proc_maps_path, "/proc/%d/task/%d/maps", getpid(), tid);
-    
     FILE *fp = fopen(proc_maps_path, "r");
     if (fp == NULL) {
         perror("fopen");
@@ -28,6 +45,9 @@ void capture_context(int tid)
     // read memory in every range and write a file with every page of memory to serialize it
     // parse the output
 
+//TODO-> Test the director creation
+// test content of the memory
+//Work on restoration from the remote machine
     char *line = NULL;
     size_t len = 0;
     ssize_t read;
@@ -38,16 +58,16 @@ void capture_context(int tid)
         char perms[5];
         if (sscanf(line, "%lx-%lx %4s", &start, &end, perms) == 3)
         {
-            printf("Came here\n");
             // Only read if we have read permission
             if (perms[0] == 'r')
             {
+
                 size_t range_size = end - start;
                 void *mem = (void *)start;
 
-                // Create a unique filename for this range
-                char filename[256];
-                sprintf(filename, "memory_dump_%d_%lx_%lx.bin", tid, start, end);
+                // Create a filename inside the thread directory
+                char filename[512];
+                sprintf(filename, "%s/memory_dump_%lx_%lx.bin", dir_name, start, end);
 
                 // Open file for writing
                 FILE *memfile = fopen(filename, "wb");
@@ -63,6 +83,18 @@ void capture_context(int tid)
             }
         }
     }
-    pclose(fp);
+    
+    // Create zip file
+    char zip_command[512];
+
+    sprintf(zip_command, "zip -r thread_%d_dump.zip %s", tid, dir_name);
+    system(zip_command);
+
+    // remove the directory
+    sprintf(rm_command, "rm -rf %s", dir_name);
+    system(rm_command);
+   
+    
+    fclose(fp);
     free(line);
 }
