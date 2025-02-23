@@ -4,14 +4,11 @@
 #include "capture_context.h"
 #include <string.h>
 #include <stdio.h>
-#include <sys/stat.h>  // for mkdir
+#include <sys/stat.h> // for mkdir
 
 /**
- * Captures the memory maps for a thread with tid 
- * and parses the output to a char pointer
- * 
- * @param buffer: the buffer to store the output
- * @param mem: the memory address to search for
+ * Captures the memory maps for a thread with tid
+ * and creates a zip file with the memory maps
  * @param tid: the thread id
  */
 
@@ -23,13 +20,15 @@ void capture_context(int tid)
     char rm_command[256];
     sprintf(rm_command, "rm -rf %s", dir_name);
     system(rm_command);
-    
-    if (mkdir(dir_name, 0755) == -1) {
+
+    if (mkdir(dir_name, 0755) == -1)
+    {
         perror("mkdir failed");
         exit(1);
     }
-    
-    if(access(dir_name, W_OK) == -1) {
+
+    if (access(dir_name, W_OK) == -1)
+    {
         perror("directory not writable");
         exit(1);
     }
@@ -37,17 +36,12 @@ void capture_context(int tid)
     char proc_maps_path[256];
     sprintf(proc_maps_path, "/proc/%d/task/%d/maps", getpid(), tid);
     FILE *fp = fopen(proc_maps_path, "r");
-    if (fp == NULL) {
+    if (fp == NULL)
+    {
         perror("fopen");
         exit(1);
     }
 
-    // read memory in every range and write a file with every page of memory to serialize it
-    // parse the output
-
-//TODO-> Test the director creation
-// test content of the memory
-//Work on restoration from the remote machine
     char *line = NULL;
     size_t len = 0;
     ssize_t read;
@@ -83,7 +77,7 @@ void capture_context(int tid)
             }
         }
     }
-    
+
     // Create zip file
     char zip_command[512];
 
@@ -93,8 +87,7 @@ void capture_context(int tid)
     // remove the directory
     sprintf(rm_command, "rm -rf %s", dir_name);
     system(rm_command);
-   
-    
+
     fclose(fp);
     free(line);
 }
