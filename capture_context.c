@@ -5,41 +5,101 @@
 #include <string.h>
 #include <stdio.h>
 #include <sys/stat.h> // for mkdir
+#include <dirent.h>   // for opendir and readdir
+#include <fcntl.h>    // for readlink
 
-/**
- * Captures the memory maps for a thread with tid
- * and creates a zip file with the memory maps
- * @param tid: the thread id
- */
+// forward declarations
+static int capture_memory(int tid, const char *dir_name);
+static int capture_open_fds(int tid, const char *dir_name);
+static void create_zip(int tid, char dir_name[256]);
 
-void capture_memory_pages(int tid)
+// Create a directory for the thread dump
+static int create_dump_directory(int tid, char *dir_name, size_t dir_name_size)
 {
+    if (dir_name == NULL || dir_name_size < 1)
+    {
+        return -1;
+    }
 
-    char dir_name[256];
-    sprintf(dir_name, "./thread_%d_dump", tid);
+    // Create directory name
+    snprintf(dir_name, dir_name_size, "./thread_%d_dump", tid);
+
+    // Remove if exists
     char rm_command[256];
-    sprintf(rm_command, "rm -rf %s", dir_name);
+    snprintf(rm_command, sizeof(rm_command), "rm -rf %s", dir_name);
     system(rm_command);
 
+    // Create new directory
     if (mkdir(dir_name, 0755) == -1)
     {
         perror("mkdir failed");
-        exit(1);
+        return -1;
     }
 
+    // Verify directory is writable
     if (access(dir_name, W_OK) == -1)
     {
         perror("directory not writable");
-        exit(1);
+        return -1;
     }
 
+    return 0;
+}
+
+// Open the proc maps file for the thread
+static FILE *open_proc_maps(int tid)
+{
     char proc_maps_path[256];
-    sprintf(proc_maps_path, "/proc/%d/task/%d/maps", getpid(), tid);
+    snprintf(proc_maps_path, sizeof(proc_maps_path),
+             "/proc/%d/task/%d/maps", getpid(), tid);
+
     FILE *fp = fopen(proc_maps_path, "r");
     if (fp == NULL)
     {
-        perror("fopen");
+        perror("Failed to open proc maps");
+        return NULL;
+    }
+
+    return fp;
+}
+
+// Main orchestrator function
+void capture_context(int tid)
+{
+    // Create directory for this capture
+    char dir_name[256];
+    if (create_dump_directory(tid, dir_name, sizeof(dir_name)) != 0)
+    {
+        fprintf(stderr, "Failed to create dump directory\n");
         exit(1);
+    }
+
+    // Capture memory pages
+    if (capture_memory(tid, dir_name) != 0)
+    {
+        fprintf(stderr, "Failed to capture memory\n");
+        exit(1);
+    }
+
+    // Capture open file descriptors
+    if (capture_open_fds(tid, dir_name) != 0)
+    {
+        fprintf(stderr, "Failed to capture FDs\n");
+        exit(1);
+    }
+
+    // Create zip and cleanup
+    create_zip(tid, dir_name);
+
+}
+
+// Memory capture function
+static int capture_memory(int tid, const char *dir_name)
+{
+    FILE *fp = open_proc_maps(tid);
+    if (fp == NULL)
+    {
+        return -1;
     }
 
     char *line = NULL;
@@ -47,30 +107,26 @@ void capture_memory_pages(int tid)
     ssize_t read;
     while ((read = getline(&line, &len, fp)) != -1)
     {
-        // Parse memory range from line
         unsigned long start, end;
         char perms[5];
         if (sscanf(line, "%lx-%lx %4s", &start, &end, perms) == 3)
         {
-            // Only read if we have read permission
             if (perms[0] == 'r')
             {
-
                 size_t range_size = end - start;
                 void *mem = (void *)start;
 
-                // Create a filename inside the thread directory
                 char filename[512];
-                sprintf(filename, "%s/memory_dump_%lx_%lx.bin", dir_name, start, end);
+                snprintf(filename, sizeof(filename),
+                         "%s/memory_dump_%lx_%lx.bin", dir_name, start, end);
 
-                // Open file for writing
                 FILE *memfile = fopen(filename, "wb");
                 if (memfile != NULL)
                 {
-                    // Try to read and write the memory range
                     if (fwrite(mem, 1, range_size, memfile) != range_size)
                     {
-                        fprintf(stderr, "Warning: Could not write full range %lx-%lx\n", start, end);
+                        fprintf(stderr, "Warning: Could not write full range %lx-%lx\n",
+                                start, end);
                     }
                     fclose(memfile);
                 }
@@ -78,6 +134,15 @@ void capture_memory_pages(int tid)
         }
     }
 
+    fclose(fp);
+    free(line);
+    return 0;
+}
+
+
+// Create a zip file from the thread dump directory
+static void create_zip(int tid, char dir_name[256])
+{
     // Create zip file
     char zip_command[512];
 
@@ -85,9 +150,50 @@ void capture_memory_pages(int tid)
     system(zip_command);
 
     // remove the directory
-    sprintf(rm_command, "rm -rf %s", dir_name);
+    char rm_command[256];
+    snprintf(rm_command, sizeof(rm_command), "rm -rf %s", dir_name);
     system(rm_command);
+}
 
-    fclose(fp);
-    free(line);
+// Capture the open file descriptors for the thread
+static int capture_open_fds(int tid, const char *dir_name)
+{
+    char proc_fd_path[256];
+    sprintf(proc_fd_path, "/proc/%d/task/%d/fd", getpid(), tid);
+
+    // open the proc fd path
+    DIR *dir = opendir(proc_fd_path);
+    if (dir == NULL)
+    {
+        perror("Failed to open proc fd");
+        return -1;
+    }
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL)
+    {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+        {
+            continue;
+        }
+
+        char fd_path[256];
+        sprintf(fd_path, "%s/%s", proc_fd_path, entry->d_name);
+
+        char link_path[256];
+        ssize_t len = readlink(fd_path, link_path, sizeof(link_path) - 1);
+        if (len != -1)
+        {
+            link_path[len] = '\0';
+        }
+        // create a filename inside the thread directory
+        char filename[512];
+        sprintf(filename, "%s/open_fd_%s", dir_name, entry->d_name);
+        char cp_command[512];
+        sprintf(cp_command, "cp %s %s", link_path, filename);
+        system(cp_command);
+    }
+
+    closedir(dir);
+    return 0;
 }

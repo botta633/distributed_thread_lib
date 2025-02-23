@@ -19,6 +19,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <linux/taskstats.h>
+#include <fcntl.h>
+
 
 #define PAGE_SIZE 4096
 #define STACK_SIZE (2 * 1024 * 1024)
@@ -60,10 +62,19 @@ static void thread_start(void *arg)
 
   thread_t *thread = *(thread_t **)((uintptr_t)__builtin_frame_address(0) + 8);
   thread_args *args = thread->args;
-  args->start_routine(args->args); // Execute the start routine
+  args->start_routine(args->args);
+  
+  //test file creation
+  FILE *file = fopen("test.txt", "w");
+  if (file == NULL) {
+    perror("Failed to open test.txt");
+  } else {
+    fprintf(file, "Hello, World!");
+  }
 
-  capture_memory_pages(thread->tid);
+  capture_context(thread->tid);
   free(args);
+  fclose(file);
   thread_exit(thread);
 }
 

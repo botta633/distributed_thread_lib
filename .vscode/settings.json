@@ -2,6 +2,13 @@
     "files.associations": {
         "mutex.h": "c",
         "kernel.h": "c",
-        "module.h": "c"
+        "module.h": "c",
+        "atomic": "c",
+        "*.tcc": "c",
+        "fstream": "c",
+        "ostream": "c",
+        "sstream": "c",
+        "locale": "c",
+        "*.inc": "c"
     }
 }

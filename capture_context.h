@@ -3,8 +3,7 @@
 
 
 #include <unistd.h>
-void capture_memory_pages(int tid);
 
-
+void capture_context(int tid);
 
 #endif // !CAPTURE
