@@ -71,10 +71,10 @@ static void thread_start(void *arg)
   } else {
     fprintf(file, "Hello, World!");
   }
-
+  fflush(file);
   capture_context(thread->tid);
-  free(args);
   fclose(file);
+  free(args);
   thread_exit(thread);
 }
 

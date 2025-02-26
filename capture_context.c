@@ -7,12 +7,15 @@
 #include <sys/stat.h> // for mkdir
 #include <dirent.h>   // for opendir and readdir
 #include <fcntl.h>    // for readlink
+#include <errno.h>    // for errno
 
-// forward declarations
+// Forward declarations
 static int capture_memory(int tid, const char *dir_name);
 static int capture_open_fds(int tid, const char *dir_name);
 static void create_zip(int tid, char dir_name[256]);
+static int copy_with_sudo(const char *src, const char *dst);
 
+// Directory management functions
 // Create a directory for the thread dump
 static int create_dump_directory(int tid, char *dir_name, size_t dir_name_size)
 {
@@ -46,6 +49,37 @@ static int create_dump_directory(int tid, char *dir_name, size_t dir_name_size)
     return 0;
 }
 
+// Main orchestrator function
+void capture_context(int tid)
+{
+    // Create directory for this capture
+    char dir_name[256];
+    printf("Creating dump directory for pid: %d tid: %d\n", getpid(), tid);
+    if (create_dump_directory(tid, dir_name, sizeof(dir_name)) != 0)
+    {
+        fprintf(stderr, "Failed to create dump directory\n");
+        exit(1);
+    }
+
+    // Capture memory pages
+    if (capture_memory(tid, dir_name) != 0)
+    {
+        fprintf(stderr, "Failed to capture memory\n");
+        exit(1);
+    }
+
+    // Capture open file descriptors
+    if (capture_open_fds(getpid(), dir_name) != 0)
+    {
+        fprintf(stderr, "Failed to capture FDs\n");
+        exit(1);
+    }
+
+    // Create zip and cleanup
+    create_zip(tid, dir_name);
+}
+
+// Memory capture functions
 // Open the proc maps file for the thread
 static FILE *open_proc_maps(int tid)
 {
@@ -61,36 +95,6 @@ static FILE *open_proc_maps(int tid)
     }
 
     return fp;
-}
-
-// Main orchestrator function
-void capture_context(int tid)
-{
-    // Create directory for this capture
-    char dir_name[256];
-    if (create_dump_directory(tid, dir_name, sizeof(dir_name)) != 0)
-    {
-        fprintf(stderr, "Failed to create dump directory\n");
-        exit(1);
-    }
-
-    // Capture memory pages
-    if (capture_memory(tid, dir_name) != 0)
-    {
-        fprintf(stderr, "Failed to capture memory\n");
-        exit(1);
-    }
-
-    // Capture open file descriptors
-    if (capture_open_fds(tid, dir_name) != 0)
-    {
-        fprintf(stderr, "Failed to capture FDs\n");
-        exit(1);
-    }
-
-    // Create zip and cleanup
-    create_zip(tid, dir_name);
-
 }
 
 // Memory capture function
@@ -139,22 +143,7 @@ static int capture_memory(int tid, const char *dir_name)
     return 0;
 }
 
-
-// Create a zip file from the thread dump directory
-static void create_zip(int tid, char dir_name[256])
-{
-    // Create zip file
-    char zip_command[512];
-
-    sprintf(zip_command, "zip -r thread_%d_dump.zip %s", tid, dir_name);
-    system(zip_command);
-
-    // remove the directory
-    char rm_command[256];
-    snprintf(rm_command, sizeof(rm_command), "rm -rf %s", dir_name);
-    system(rm_command);
-}
-
+// File descriptor capture functions
 // Capture the open file descriptors for the thread
 static int capture_open_fds(int tid, const char *dir_name)
 {
@@ -177,6 +166,12 @@ static int capture_open_fds(int tid, const char *dir_name)
             continue;
         }
 
+        //exclude the fd 0. 1. 2
+        if (strcmp(entry->d_name, "0") == 0 || strcmp(entry->d_name, "1") == 0 || strcmp(entry->d_name, "2") == 0)
+        {
+            continue;
+        }
+
         char fd_path[256];
         sprintf(fd_path, "%s/%s", proc_fd_path, entry->d_name);
 
@@ -186,14 +181,45 @@ static int capture_open_fds(int tid, const char *dir_name)
         {
             link_path[len] = '\0';
         }
-        // create a filename inside the thread directory
         char filename[512];
         sprintf(filename, "%s/open_fd_%s", dir_name, entry->d_name);
+        //exculde the fd that refers to the current open proc dir
+        if (strstr(link_path, "/proc/") != NULL)
+        {
+            continue;
+        }
         char cp_command[512];
-        sprintf(cp_command, "cp %s %s", link_path, filename);
-        system(cp_command);
+        sprintf(cp_command, "sudo cp %s %s", link_path, filename);
+        int status = system(cp_command);
+        if (status != 0)
+        {
+            printf("Failed to copy FD %s\n", entry->d_name);
+        }
     }
 
     closedir(dir);
     return 0;
+}
+
+// Utility functions
+// Create a zip file from the thread dump directory
+static void create_zip(int tid, char dir_name[256])
+{
+    // Create zip file
+    char zip_command[512];
+
+    sprintf(zip_command, "zip -r thread_%d_dump.zip %s", tid, dir_name);
+    system(zip_command);
+
+    // remove the directory
+    char rm_command[256];
+    snprintf(rm_command, sizeof(rm_command), "rm -rf %s", dir_name);
+    system(rm_command);
+}
+
+static int copy_with_sudo(const char *src, const char *dst)
+{
+    char command[1024];
+    snprintf(command, sizeof(command), "sudo cp %s %s 2>/dev/null", src, dst);
+    return system(command);
 }
